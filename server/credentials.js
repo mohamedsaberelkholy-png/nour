@@ -1,0 +1,6 @@
+const crypto = require('node:crypto'); const os = require('node:os');
+const key = crypto.createHash('sha256').update(process.env.NOUR_CREDENTIAL_KEY || `${os.hostname()}:${os.userInfo().username}:nour-local-credentials`).digest();
+function seal(value) { if (!value) return ''; if (String(value).startsWith('enc:v1:')) return String(value); const iv = crypto.randomBytes(12); const cipher = crypto.createCipheriv('aes-256-gcm', key, iv); const encrypted = Buffer.concat([cipher.update(String(value), 'utf8'), cipher.final()]); return `enc:v1:${iv.toString('base64url')}:${cipher.getAuthTag().toString('base64url')}:${encrypted.toString('base64url')}`; }
+function unseal(value) { if (!value) return ''; if (!String(value).startsWith('enc:v1:')) return String(value); const [, version, ivText, tagText, dataText] = String(value).split(':'); if (version !== 'v1') throw new Error('Unsupported credential version.'); const decipher = crypto.createDecipheriv('aes-256-gcm', key, Buffer.from(ivText, 'base64url')); decipher.setAuthTag(Buffer.from(tagText, 'base64url')); return Buffer.concat([decipher.update(Buffer.from(dataText, 'base64url')), decipher.final()]).toString('utf8'); }
+function isSealed(value) { return typeof value === 'string' && value.startsWith('enc:v1:'); }
+module.exports = { seal, unseal, isSealed };

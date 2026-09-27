@@ -1,0 +1,10 @@
+const test = require('node:test'); const assert = require('node:assert/strict'); const fs = require('node:fs'); const os = require('node:os'); const path = require('node:path');
+const root = fs.mkdtempSync(path.join(os.tmpdir(), 'nour-v2-')); process.env.NOUR_DATA_FILE = path.join(root, 'nour.json');
+const store = require('../server/store'); const data = require('../server/v2-data'); const catalog = require('../server/v2-skills');
+const credentials = require('../server/credentials'); const { dueReminders } = require('../server/index');
+test.after(() => fs.rmSync(root, { recursive: true, force: true }));
+test('v2 local records validate and persist', () => { const event = data.create(store, 'calendar', { title: 'Planning', startsAt: '2030-01-01T10:00:00Z' }); assert.equal(data.list(store, 'calendar').length, 1); assert.equal(data.update(store, 'calendar', event.id, { title: 'Planning v2' }).title, 'Planning v2'); data.remove(store, 'calendar', event.id); assert.equal(data.list(store, 'calendar').length, 0); });
+test('finance and health reject malformed records', () => { assert.throws(() => data.create(store, 'finance', { description: 'bad', amount: -1 }), /Invalid amount/); assert.throws(() => data.create(store, 'health', { metric: '' }), /Invalid health metric/); });
+test('all v2 skills are exposed with safe defaults', () => { const skills = catalog.publicCatalog(store); assert.equal(skills.length, 12); assert.ok(skills.every(skill => skill.enabled)); });
+test('daily reminder recurrence advances instead of becoming stale', () => { const reminder = store.addReminder('Daily check', new Date(Date.now() - 86400000).toISOString(), 'daily'); const result = dueReminders().find(item => item.id === reminder.id); assert.equal(result.status, 'scheduled'); assert.ok(new Date(result.dueAt) > new Date()); });
+test('credentials are encrypted at rest and round-trip', () => { const sealed = credentials.seal('v2.1-secret'); assert.equal(credentials.isSealed(sealed), true); assert.equal(credentials.unseal(sealed), 'v2.1-secret'); assert.equal(sealed.includes('v2.1-secret'), false); });
