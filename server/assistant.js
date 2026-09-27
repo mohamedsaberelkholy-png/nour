@@ -17,6 +17,7 @@ function intent(input) {
   const goal = input.match(/^(?:set|add|create)\s+(?:a\s+)?goal(?:\s+to|\s+called|:)\s*(.+)$/i); if (goal) return { skill: 'goals.create', input: { title: goal[1].trim() } };
   if (/^(?:show|list)\s+(?:my\s+)?goals$/i.test(input)) return { listGoals: true };
   const completeGoal = input.match(/^complete\s+goal\s+(.+)$/i); if (completeGoal) return { completeGoalTitle: completeGoal[1].trim() };
+  const phoneNotice = input.match(/^(?:notify|message)\s+my\s+phone\s+(?:that\s+)?(.+)$/i); if (phoneNotice) return { skill: 'android.notify', input: { title: 'Nour notification', body: phoneNotice[1].trim() } };
   const task = input.match(/^(?:add\s+)?["']?(.+?)["']?\s+(?:to\s+)?(?:my\s+)?tasks?$/i); if (task) return { skill: 'tasks.create', input: { title: task[1] } };
   if (/^(?:what'?s|show) (?:important )?(?:today|my tasks)/i.test(input)) return { listTasks: true, importantToday: /important/i.test(input) };
   const complete = input.match(/^mark\s+(.+?)\s+(?:as\s+)?complete$/i); if (complete) return { completeTaskTitle: complete[1] };

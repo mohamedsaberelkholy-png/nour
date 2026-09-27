@@ -12,13 +12,14 @@ import java.io.*;
 import java.net.*;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.*;
+import java.util.UUID;
 
 public class MainActivity extends Activity {
     static final int BG = Color.rgb(7,18,23), PANEL = Color.rgb(12,27,34), AQUA = Color.rgb(86,239,214), MUTED = Color.rgb(139,164,167);
     LinearLayout content, messages; EditText composer; TextView status; SharedPreferences prefs; ExecutorService executor = Executors.newSingleThreadExecutor();
-    String baseUrl;
+    String baseUrl, deviceId;
 
-    @Override public void onCreate(Bundle state) { super.onCreate(state); prefs = getSharedPreferences("nour", MODE_PRIVATE); baseUrl = prefs.getString("baseUrl", "http://10.0.2.2:4111"); buildShell(); if (prefs.getBoolean("setupComplete", false)) showChat(); else showSetup(); refresh(); }
+    @Override public void onCreate(Bundle state) { super.onCreate(state); prefs = getSharedPreferences("nour", MODE_PRIVATE); baseUrl = prefs.getString("baseUrl", "http://10.0.2.2:4111"); deviceId = prefs.getString("deviceId", ""); if (deviceId.isEmpty()) { deviceId = UUID.randomUUID().toString().replace("-", ""); prefs.edit().putString("deviceId", deviceId).apply(); } buildShell(); if (prefs.getBoolean("setupComplete", false)) showChat(); else showSetup(); refresh(); }
     TextView text(String value, float size, int color) { TextView v = new TextView(this); v.setText(value); v.setTextSize(size); v.setTextColor(color); v.setPadding(20,14,20,14); return v; }
     Button button(String value) { Button b = new Button(this); b.setText(value); b.setTextColor(Color.WHITE); b.setAllCaps(false); b.setBackgroundColor(Color.rgb(22,57,64)); return b; }
     void buildShell() {
@@ -53,7 +54,9 @@ public class MainActivity extends Activity {
     void showTasks() { clear("Tasks"); request("/api/tasks","GET",null,result->{ try { JSONArray a=result.getJSONArray("tasks"); if(a.length()==0)content.addView(text("No tasks yet.",15,MUTED)); for(int i=0;i<a.length();i++){JSONObject t=a.getJSONObject(i); content.addView(text((t.optString("status").equals("completed")?"✓ ":"○ ")+t.optString("title")+"\n"+t.optString("priority","medium"),15,Color.WHITE));} }catch(Exception e){error(e);}}); }
     void showReminders() { clear("Reminders"); request("/api/reminders","GET",null,result->{ try {JSONArray a=result.getJSONArray("reminders"); if(a.length()==0)content.addView(text("No reminders yet.",15,MUTED)); for(int i=0;i<a.length();i++){JSONObject r=a.getJSONObject(i);content.addView(text((r.optString("status").equals("due")?"● DUE ":"◷ ")+r.optString("title")+"\n"+r.optString("dueAt"),15,Color.WHITE));}}catch(Exception e){error(e);}}); }
     void showSettings() { clear("Connection"); content.addView(text("On an emulator use 10.0.2.2. A physical phone needs a reachable Nour host and an intentional network binding.",14,MUTED)); EditText url=new EditText(this); url.setText(baseUrl); url.setTextColor(Color.WHITE); url.setHintTextColor(MUTED); url.setHint("http://10.0.2.2:4111"); content.addView(url); EditText token=new EditText(this); token.setText(prefs.getString("authToken","")); token.setTextColor(Color.WHITE); token.setHintTextColor(MUTED); token.setHint("Nour password"); token.setInputType(129); content.addView(token); Button save=button("Save connection"); save.setOnClickListener(v->{baseUrl=url.getText().toString().replaceAll("/$","");prefs.edit().putString("baseUrl",baseUrl).putString("authToken",token.getText().toString().trim()).apply(); refresh();}); content.addView(save); }
-    void refresh() { request("/api/health","GET",null,result->{status.setText("● ONLINE");status.setTextColor(AQUA);},false); }
+    void refresh() { request("/api/health","GET",null,result->{status.setText("● ONLINE");status.setTextColor(AQUA); registerDevice();},false); }
+    void registerDevice() { JSONObject body=new JSONObject(); try{body.put("id",deviceId);body.put("name","Nour Android");}catch(Exception ignored){} request("/api/android/register","POST",body,result->pollCommands(),false); }
+    void pollCommands() { request("/api/android/commands?deviceId="+deviceId,"GET",null,result->{ try { JSONArray commands=result.optJSONArray("commands"); if(commands==null)return; for(int i=0;i<commands.length();i++){ JSONObject command=commands.getJSONObject(i); if("notify".equals(command.optString("type"))){ JSONObject payload=command.optJSONObject("payload"); Toast.makeText(this,(payload==null?"Nour":payload.optString("title","Nour"))+"\n"+(payload==null?"":payload.optString("body","")),Toast.LENGTH_LONG).show(); } JSONObject done=new JSONObject(); done.put("success",true); request("/api/android/commands/"+command.optString("id")+"/result","POST",done,result2->{} ,false); } }catch(Exception ignored){} },false); }
     JSONObject json(String key,String value){JSONObject o=new JSONObject();try{o.put(key,value);}catch(Exception ignored){}return o;}
     interface Callback { void done(JSONObject result); }
     void request(String path,String method,JSONObject body,Callback cb){request(path,method,body,cb,true);}
