@@ -11,20 +11,22 @@ function folderIntent(input) {
 function intent(input) {
   const lower = input.toLowerCase();
   if (/^don't remember anything from this conversation\.?$/i.test(input)) return { privacy: true };
-  const remember = input.match(/^remember(?:\s+that)?\s+(.+)/i); if (remember) return { skill: 'memory.save', input: { text: remember[1] } };
+  const remember = input.match(/^(?:please\s+)?remember(?:\s+that)?\s+(.+)/i); if (remember) return { skill: 'memory.save', input: { text: remember[1] } };
   const forget = input.match(/^(?:forget|don't remember)\s+(.+)/i); if (forget) return { skill: 'memory.forget', input: { query: forget[1] } };
   const recall = input.match(/^(?:what do you remember about|remembered?)\s+(.+)/i); if (recall) return { skill: 'memory.search', input: { query: recall[1] } };
+  const memorySearch = input.match(/^(?:search|find)\s+(?:your\s+)?memory(?:\s+for|about)?\s+(.+)/i); if (memorySearch) return { skill: 'memory.search', input: { query: memorySearch[1] } };
   const goal = input.match(/^(?:set|add|create)\s+(?:a\s+)?goal(?:\s+(?:to|called)\s*|:\s*|\s+)(.+)$/i); if (goal) return { skill: 'goals.create', input: { title: goal[1].trim() } };
   if (/^(?:show|list)\s+(?:my\s+)?goals$/i.test(input)) return { listGoals: true };
   const completeGoal = input.match(/^complete\s+goal\s+(.+)$/i); if (completeGoal) return { completeGoalTitle: completeGoal[1].trim() };
   const progress = input.match(/^(?:update\s+goal\s+)?(.+?)\s+(?:is|to)\s+(\d{1,3})%\s*(?:complete|done)?$/i) || input.match(/^(.+?)\s+(\d{1,3})%\s*(?:complete|done)?$/i); if (progress && Number(progress[2]) <= 100) return { goalProgress: progress[1].trim(), progress: Number(progress[2]) };
   if (/^(?:what should I work on|what's next|review my goals|show goal progress)$/i.test(input)) return { recommendGoals: true };
   const phoneNotice = input.match(/^(?:notify|message)\s+my\s+phone\s+(?:that\s+)?(.+)$/i); if (phoneNotice) return { skill: 'android.notify', input: { title: 'Nour notification', body: phoneNotice[1].trim() } };
+  const taskCreate = input.match(/^(?:please\s+)?(?:create|add|make)\s+(?:a\s+)?task(?:\s+to|\s+called|:)?\s*(.+)$/i); if (taskCreate) return { skill: 'tasks.create', input: { title: taskCreate[1] } };
   const task = input.match(/^(?:add\s+)?["']?(.+?)["']?\s+(?:to\s+)?(?:my\s+)?tasks?$/i); if (task) return { skill: 'tasks.create', input: { title: task[1] } };
-  if (/^(?:what'?s|show) (?:important )?(?:today|my tasks)/i.test(input)) return { listTasks: true, importantToday: /important/i.test(input) };
+  if (/^(?:what'?s|show|list) (?:important )?(?:today|my tasks|tasks)/i.test(input)) return { listTasks: true, importantToday: /important/i.test(input) };
   const complete = input.match(/^mark\s+(.+?)\s+(?:as\s+)?complete$/i); if (complete) return { completeTaskTitle: complete[1] };
   const reminder = input.match(/remind me to\s+(.+?)\s+(?:at|on)\s+(.+)/i); if (reminder) { const dueAt = parseDate(reminder[2]); return dueAt ? { skill: 'reminders.create', input: { title: reminder[1], dueAt } } : { error: 'I could not read that reminder time.' }; }
-  if (/system|cpu|memory usage|ram|computer status|how is my computer/i.test(lower)) return { skill: 'system.inspect', input: {} };
+  if (/(?:show|check|inspect|report|what is)?.*(?:system status|computer status|cpu|ram|memory usage|disk space|storage|network status)/i.test(input)) return { skill: 'system.inspect', input: {} };
   const search = input.match(/(?:find|search for)\s+(?:file\s+)?["']?(.+?)["']?$/i); if (search) return { skill: 'files.search', input: { query: search[1] } };
   const url = input.match(/^(?:open|browse)\s+(https?:\/\/\S+)$/i); if (url) return { skill: 'browser.open', input: { url: url[1] } };
   const read = input.match(/^(?:read|open)\s+(?:file\s+)?(.+)$/i); if (read) return { skill: 'files.read', input: { path: read[1].trim() } };
