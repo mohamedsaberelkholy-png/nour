@@ -14,9 +14,11 @@ function intent(input) {
   const remember = input.match(/^remember(?:\s+that)?\s+(.+)/i); if (remember) return { skill: 'memory.save', input: { text: remember[1] } };
   const forget = input.match(/^(?:forget|don't remember)\s+(.+)/i); if (forget) return { skill: 'memory.forget', input: { query: forget[1] } };
   const recall = input.match(/^(?:what do you remember about|remembered?)\s+(.+)/i); if (recall) return { skill: 'memory.search', input: { query: recall[1] } };
-  const goal = input.match(/^(?:set|add|create)\s+(?:a\s+)?goal(?:\s+to|\s+called|:)\s*(.+)$/i); if (goal) return { skill: 'goals.create', input: { title: goal[1].trim() } };
+  const goal = input.match(/^(?:set|add|create)\s+(?:a\s+)?goal(?:\s+(?:to|called)\s*|:\s*|\s+)(.+)$/i); if (goal) return { skill: 'goals.create', input: { title: goal[1].trim() } };
   if (/^(?:show|list)\s+(?:my\s+)?goals$/i.test(input)) return { listGoals: true };
   const completeGoal = input.match(/^complete\s+goal\s+(.+)$/i); if (completeGoal) return { completeGoalTitle: completeGoal[1].trim() };
+  const progress = input.match(/^(?:update\s+goal\s+)?(.+?)\s+(?:is\s+)?(\d{1,3})%\s*(?:complete|done)?$/i); if (progress && Number(progress[2]) <= 100) return { goalProgress: progress[1].trim(), progress: Number(progress[2]) };
+  if (/^(?:what should I work on|what's next|review my goals|show goal progress)$/i.test(input)) return { recommendGoals: true };
   const phoneNotice = input.match(/^(?:notify|message)\s+my\s+phone\s+(?:that\s+)?(.+)$/i); if (phoneNotice) return { skill: 'android.notify', input: { title: 'Nour notification', body: phoneNotice[1].trim() } };
   const task = input.match(/^(?:add\s+)?["']?(.+?)["']?\s+(?:to\s+)?(?:my\s+)?tasks?$/i); if (task) return { skill: 'tasks.create', input: { title: task[1] } };
   if (/^(?:what'?s|show) (?:important )?(?:today|my tasks)/i.test(input)) return { listTasks: true, importantToday: /important/i.test(input) };
@@ -32,18 +34,22 @@ function intent(input) {
 function createAssistant({ registry, store: activeStore = store } = {}) {
   async function respondInternal(text, { conversationId = 'default' } = {}) {
     const input = String(text || '').trim(); if (!input) return { status: 'completed', text: 'I’m listening.' };
-    const result = intent(input); const privacy = activeStore.read().conversations[conversationId]?.persistenceDisabled;
+    const existingConversation = activeStore.read().conversations[conversationId] || { persistenceDisabled: false, messages: [] }; const history = Array.isArray(existingConversation.messages) ? existingConversation.messages.slice(-20).map(message => ({ role: message.role, content: message.content })) : []; const result = intent(input); const privacy = existingConversation.persistenceDisabled;
     if (!privacy && !result?.privacy) activeStore.appendConversationMessage(conversationId, { role: 'user', content: input });
     if (result?.privacy) { activeStore.setConversationPrivacy(conversationId, true); activeStore.log('conversation.privacy_enabled', 'Conversation persistence disabled'); return { status: 'completed', text: 'Understood. I will not save anything from this conversation.' }; }
     if (result?.error) return { status: 'rejected', text: result.error };
-    if (result?.listGoals) { const goals = activeStore.read().goals.filter(goal => goal.status === 'active'); return { status: 'completed', skill: 'goals.list', text: goals.length ? goals.map(goal => `• [${goal.priority}] ${goal.title}`).join('\n') : 'No active goals.', data: goals }; }
+    if (result?.listGoals) { const goals = activeStore.read().goals.filter(goal => goal.status === 'active'); return { status: 'completed', skill: 'goals.list', text: goals.length ? goals.map(goal => `• [${goal.priority}] ${goal.title} — ${goal.progress || 0}%${goal.nextAction ? ` · next: ${goal.nextAction}` : ''}`).join('\n') : 'No active goals.', data: goals }; }
     if (result?.completeGoalTitle) { const goal = activeStore.read().goals.find(item => item.status === 'active' && item.title.toLowerCase() === result.completeGoalTitle.toLowerCase()); return goal ? registry.request('goals.complete', { id: goal.id }, { conversationId }) : { status: 'rejected', text: 'I could not find that active goal.' }; }
+    if (result?.goalProgress) { const goal = activeStore.read().goals.find(item => item.status === 'active' && item.title.toLowerCase() === result.goalProgress.toLowerCase()); return goal ? registry.request('goals.update', { id: goal.id, progress: result.progress }, { conversationId }) : { status: 'rejected', text: 'I could not find that active goal.' }; }
+    if (result?.recommendGoals) { const goals = activeStore.read().goals.filter(goal => goal.status === 'active').sort((a, b) => ({ high: 0, medium: 1, low: 2 }[a.priority] - ({ high: 0, medium: 1, low: 2 }[b.priority]) || (a.dueAt || '9999').localeCompare(b.dueAt || '9999'))); return { status: 'completed', skill: 'goals.recommend', text: goals.length ? goals.map(goal => `• ${goal.title} — ${goal.progress || 0}%${goal.nextAction ? `; next: ${goal.nextAction}` : '; define a next action'}`).join('\n') : 'You have no active goals.', data: goals }; }
     if (result?.listTasks) { const today = new Date().toISOString().slice(0, 10); const tasks = activeStore.read().tasks.filter(t => t.status === 'open' && (!result.importantToday || t.important || (t.dueAt && t.dueAt.slice(0, 10) <= today))); return { status: 'completed', skill: 'tasks.list', text: tasks.length ? tasks.map(t => `• [${t.priority}] ${t.title}`).join('\n') : 'No matching open tasks.', data: tasks }; }
     if (result?.completeTaskTitle) { const task = activeStore.read().tasks.find(t => t.status === 'open' && t.title.toLowerCase() === result.completeTaskTitle.toLowerCase()); return task ? registry.request('tasks.complete', { id: task.id }, { conversationId }) : { status: 'rejected', text: 'I could not find that open task.' }; }
     if (result?.skill) return registry.request(result.skill, result.input, { conversationId });
     try {
       const memories = activeStore.read().memories.slice(0, 12).map(m => `- ${m.text}`).join('\n');
-      const answer = await llm.ask([{ role: 'system', content: `You are Nour. Reply conversationally only. Never claim you took a computer action. Tools are selected and authorized by a separate server registry. Explicit memory only:\n${memories || '(empty)'}` }, { role: 'user', content: input }]);
+      const goals = activeStore.read().goals.filter(goal => goal.status === 'active').slice(0, 8).map(goal => `- ${goal.title} (${goal.progress || 0}%${goal.nextAction ? `; next: ${goal.nextAction}` : ''})`).join('\n');
+      const messages = [{ role: 'system', content: `You are Nour. Reply conversationally only. Never claim you took a computer action. Tools are selected and authorized by a separate server registry. Explicit memory only:\n${memories || '(empty)'}\nActive goals:\n${goals || '(empty)'}` }, ...history, { role: 'user', content: input }];
+      const answer = await llm.ask(messages);
       if (answer) { activeStore.log('llm.chat', 'Model response'); return { status: 'completed', skill: 'llm', text: answer }; }
     } catch (error) { activeStore.log('llm.failed', error.message, { success: false }); return { status: 'failed', skill: 'llm', text: `Your configured LLM could not be reached: ${error.message}` }; }
     return { status: 'completed', text: 'I can manage explicit memories, goals, tasks, reminders, files, system status, and approved computer actions.' };
