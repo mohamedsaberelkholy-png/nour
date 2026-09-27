@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: nour
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NOUR_BIND_HOST
+        value: 0.0.0.0
+      - key: NOUR_AUTH_PASSWORD
+        sync: false
+      - key: NOUR_CREDENTIAL_KEY
+        generateValue: true
