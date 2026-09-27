@@ -81,3 +81,5 @@ node --test
 The repository includes `render.yaml` for a Node web service. In Render, create a Blueprint from this repository, set `NOUR_AUTH_PASSWORD` to your private Nour password, and deploy. Render supplies `PORT`; the Blueprint binds Nour to `0.0.0.0` and generates `NOUR_CREDENTIAL_KEY` for encrypted credentials. Open the resulting HTTPS `onrender.com` URL on the phone and enter the same password when Nour asks.
 
 The free Render plan has ephemeral storage, so local memories, tasks, and uploaded data can be lost during a redeploy or restart. Attach a persistent disk on a paid web service and mount it at `/opt/render/project/src/data` if durable local storage is required.
+
+To keep the hosted assistant out of fallback mode, set `NOUR_LLM_PROVIDER`, `NOUR_LLM_BASE_URL`, `NOUR_LLM_MODEL`, and `NOUR_LLM_API_KEY` in Render. The API key is read as a secret environment variable and is never committed to the repository.

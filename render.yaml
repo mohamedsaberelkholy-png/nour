@@ -13,3 +13,11 @@ services:
         sync: false
       - key: NOUR_CREDENTIAL_KEY
         generateValue: true
+      - key: NOUR_LLM_PROVIDER
+        sync: false
+      - key: NOUR_LLM_BASE_URL
+        sync: false
+      - key: NOUR_LLM_MODEL
+        sync: false
+      - key: NOUR_LLM_API_KEY
+        sync: false
